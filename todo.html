@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>To‑Do List App</title>
+  <style>
+    :root{--bg:#f3f4f6;--card:#fff;--accent:#2563eb;--muted:#6b7280;--danger:#ef4444}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;background:var(--bg);font-family:Inter,system-ui,Segoe UI,Roboto,Arial;color:#0f172a;display:flex;align-items:center;justify-content:center;padding:28px}
+
+    .app{width:100%;max-width:880px;background:var(--card);border-radius:14px;box-shadow:0 12px 40px rgba(2,6,23,0.08);overflow:hidden}
+    .app header{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid #eef2ff}
+    .title{font-weight:700;color:var(--accent)}
+
+    .controls{display:flex;gap:12px;align-items:center}
+    .new-task{display:flex;gap:8px;width:100%;max-width:640px}
+    .new-task input[type="text"]{flex:1;padding:10px 12px;border-radius:10px;border:1px solid #e6eefc;font-size:1rem}
+    .btn{padding:10px 14px;border-radius:10px;border:0;cursor:pointer;font-weight:700}
+    .btn-add{background:var(--accent);color:#fff}
+    .btn-clear{background:#f1f5f9;color:var(--muted)}
+    .layout{display:grid;grid-template-columns:1fr 320px;gap:18px;padding:20px}
+
+    /* Task list */
+    .tasks{background:#fbfdff;padding:14px;border-radius:10px;height:420px;overflow:auto}
+    .tasks ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+    .task{display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;border:1px solid transparent}
+    .task .info{flex:1;display:flex;flex-direction:column}
+    .task .text{font-weight:600}
+    .task .meta{font-size:0.88rem;color:var(--muted);margin-top:6px}
+    .task .actions{display:flex;gap:8px}
+
+    .task.completed .text{color:var(--muted);text-decoration:line-through;font-weight:600}
+    .task.completed{background:#f8fafc}
+
+    .aside{background:var(--card);padding:16px;border-radius:10px;border:1px solid #eef2ff;height:420px}
+    .stats{display:flex;flex-direction:column;gap:8px}
+    .stat{display:flex;justify-content:space-between;padding:10px;border-radius:8px;background:#fbfdff}
+
+    /* Small controls inside task */
+    .icon-btn{background:transparent;border:1px solid transparent;padding:8px;border-radius:8px;cursor:pointer}
+    .icon-btn:hover{background:#eef2ff}
+    .edit-input{padding:8px 10px;border-radius:8px;border:1px solid #e6eefc;width:100%}
+
+    /* Responsive */
+    @media (max-width:880px){
+      .layout{grid-template-columns:1fr;}
+      .aside{height:auto}
+      .tasks{height:360px}
+    }
+    @media (max-width:520px){
+      body{padding:12px}
+      .tasks{height:300px}
+    }
+  </style>
+</head>
+<body>
+  <main class="app" role="application" aria-label="To-do app">
+    <header>
+      <div class="title">My To‑Do List</div>
+      <div class="controls">
+        <button id="clearAll" class="btn btn-clear" title="Clear completed">Clear Completed</button>
+      </div>
+    </header>
+
+    <section class="layout">
+      <section class="tasks" aria-live="polite">
+        <form id="addForm" class="new-task" onsubmit="return false;">
+          <input id="newInput" type="text" placeholder="Add a new task" aria-label="New task">
+          <button id="addBtn" class="btn btn-add" type="button">Add</button>
+        </form>
+
+        <div id="listContainer">
+          <ul id="taskList"></ul>
+        </div>
+      </section>
+
+      <aside class="aside" aria-label="Task summary">
+        <div class="stats">
+          <div class="stat"><span>Total tasks</span><strong id="totalCount">0</strong></div>
+          <div class="stat"><span>Completed</span><strong id="completedCount">0</strong></div>
+          <div class="stat"><span>Remaining</span><strong id="remainingCount">0</strong></div>
+        </div>
+        <div style="margin-top:12px;color:var(--muted);font-size:0.95rem">Tip: click edit to modify a task; use the checkbox to mark complete.</div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    // Simple to-do app with add/edit/delete/complete and localStorage persistence
+    const STORAGE_KEY = 'todo.tasks.v1';
+    const newInput = document.getElementById('newInput');
+    const addBtn = document.getElementById('addBtn');
+    const taskList = document.getElementById('taskList');
+    const totalCount = document.getElementById('totalCount');
+    const completedCount = document.getElementById('completedCount');
+    const remainingCount = document.getElementById('remainingCount');
+    const clearAllBtn = document.getElementById('clearAll');
+
+    let tasks = loadTasks();
+    render();
+
+    addBtn.addEventListener('click', ()=>{
+      const text = newInput.value.trim();
+      if(!text){
+        newInput.focus();
+        return; // basic validation: don't add empty
+      }
+      const task = {id: Date.now().toString(), text, completed:false, created: new Date().toISOString() };
+      tasks.unshift(task); // newest first
+      saveTasks();
+      newInput.value = '';
+      render();
+    });
+
+    // keyboard: Enter to add
+    newInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ addBtn.click(); } });
+
+    // event delegation for actions: toggle, delete, edit, save, cancel
+    taskList.addEventListener('click', (e)=>{
+      const target = e.target;
+      const li = target.closest('li[data-id]');
+      if(!li) return;
+      const id = li.dataset.id;
+      if(target.matches('.delete')){ // delete
+        tasks = tasks.filter(t=>t.id !== id);
+        saveTasks(); render();
+      } else if(target.matches('.toggle')){ // checkbox
+        const task = tasks.find(t=>t.id===id);
+        task.completed = !task.completed; saveTasks(); render();
+      } else if(target.matches('.edit')){ // enter edit mode
+        enterEditMode(li,id);
+      } else if(target.matches('.save')){ // save edited
+        const input = li.querySelector('.edit-input');
+        const val = input.value.trim();
+        if(!val) { input.focus(); return; }
+        const task = tasks.find(t=>t.id===id);
+        task.text = val; saveTasks(); render();
+      } else if(target.matches('.cancel')){ render(); }
+    });
+
+    function enterEditMode(li,id){
+      const task = tasks.find(t=>t.id===id);
+      li.innerHTML = `
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+          <input class="edit-input" value="${escapeHtml(task.text)}" aria-label="Edit task">
+          <div style="display:flex;gap:8px">
+            <button class="btn save" style="background:var(--accent);color:#fff">Save</button>
+            <button class="btn cancel" style="background:#f1f5f9">Cancel</button>
+          </div>
+        </div>
+      `;
+      li.querySelector('.edit-input').focus();
+    }
+
+    // render tasks
+    function render(){
+      taskList.innerHTML = '';
+      if(tasks.length === 0){
+        taskList.innerHTML = '<li style="color:var(--muted);padding:14px">No tasks yet — add your first task above.</li>';
+      } else {
+        for(const t of tasks){
+          const li = document.createElement('li');
+          li.dataset.id = t.id;
+          li.className = 'task' + (t.completed? ' completed':'');
+          li.innerHTML = `
+            <label style="display:flex;align-items:center;gap:12px;width:100%">
+              <input class="toggle" type="checkbox" ${t.completed? 'checked':''} aria-label="Mark complete">
+              <div class="info">
+                <div class="text">${escapeHtml(t.text)}</div>
+                <div class="meta">Added: ${new Date(t.created).toLocaleString()}</div>
+              </div>
+            </label>
+            <div class="actions">
+              <button class="icon-btn edit" title="Edit">✏️</button>
+              <button class="icon-btn delete" title="Delete" style="color:var(--danger)">🗑️</button>
+            </div>
+          `;
+          taskList.appendChild(li);
+        }
+      }
+      updateStats();
+    }
+
+    function updateStats(){
+      totalCount.textContent = tasks.length;
+      const completed = tasks.filter(t=>t.completed).length;
+      completedCount.textContent = completed;
+      remainingCount.textContent = tasks.length - completed;
+    }
+
+    clearAllBtn.addEventListener('click', ()=>{
+      tasks = tasks.filter(t=>!t.completed);
+      saveTasks(); render();
+    });
+
+    // localStorage helpers
+    function saveTasks(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); }
+    function loadTasks(){ try{ const raw = localStorage.getItem(STORAGE_KEY); return raw? JSON.parse(raw):[] }catch{ return [] } }
+
+    // Small utility to escape user-provided text when injecting HTML
+    function escapeHtml(str){ return String(str)
+        .replaceAll('&','&amp;')
+        .replaceAll('<','&lt;')
+        .replaceAll('>','&gt;')
+        .replaceAll('"','&quot;')
+        .replaceAll("'","&#39;"); }
+  </script>
+</body>
+</html>

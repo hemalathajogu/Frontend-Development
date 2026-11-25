@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Quick Quiz</title>
+  <style>
+    :root{--bg:#f7fafc;--card:#fff;--accent:#2563eb;--muted:#6b7280}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);font-family:Inter,system-ui,Segoe UI,Roboto,Arial;color:#0f172a;padding:24px}
+    .card{width:100%;max-width:720px;background:var(--card);border-radius:12px;padding:22px;box-shadow:0 8px 30px rgba(2,6,23,0.08)}
+    header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+    header h1{font-size:1.25rem;margin:0}
+    .meta{color:var(--muted);font-size:0.95rem}
+    .question-area{margin-top:6px}
+    fieldset{border:0;padding:0;margin:0}
+    .choices{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+    .choice label{display:block;padding:10px 12px;border-radius:8px;border:1px solid #eef2ff;cursor:pointer}
+    .choice input{margin-right:10px}
+    .controls{display:flex;justify-content:space-between;align-items:center;margin-top:20px}
+    .btn{padding:10px 16px;border-radius:8px;border:0;cursor:pointer;font-weight:600}
+    .btn-primary{background:var(--accent);color:#fff}
+    .btn-disabled{background:#e6eefc;color:#94a3b8;cursor:not-allowed}
+    .progress{color:var(--muted);font-size:0.95rem}
+    .result{text-align:center;padding:18px}
+    .score{font-size:2.2rem;color:var(--accent);font-weight:800}
+    @media (max-width:520px){.card{padding:16px}}
+  </style>
+</head>
+<body>
+  <main class="card" role="main">
+    <header>
+      <h1>Quick Quiz</h1>
+      <div class="meta">3+ Questions • basic JS</div>
+    </header>
+
+    <section id="quiz-section">
+      <div class="question-area">
+        <div class="progress" id="progress">Question 1 of 3</div>
+        <h2 id="question" style="margin:10px 0 0 0">Loading question…</h2>
+      </div>
+
+      <form id="choices-form" aria-labelledby="question">
+        <fieldset class="choices" id="choices"></fieldset>
+      </form>
+
+      <div class="controls">
+        <button id="prevBtn" class="btn" style="visibility:hidden">Previous</button>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button id="nextBtn" class="btn btn-primary btn-disabled" disabled>Next</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="result-section" style="display:none;margin-top:18px">
+      <div class="result" id="result"></div>
+      <div style="text-align:center;margin-top:14px"><button id="restartBtn" class="btn">Restart Quiz</button></div>
+    </section>
+  </main>
+
+  <script>
+    const quiz = [
+      {
+        q: 'Which HTML tag is used to define an unordered list?',
+        choices: ['<ol>', '<ul>', '<li>', '<list>'],
+        answer: 1
+      },
+      {
+        q: 'What does CSS stand for?',
+        choices: ['Computer Style Sheets', 'Creative Style System', 'Cascading Style Sheets', 'Central Style Syntax'],
+        answer: 2
+      },
+      {
+        q: 'Which JavaScript method converts a JSON string into an object?',
+        choices: ['JSON.parse()', 'JSON.stringify()', 'JSON.toObject()', 'JSON.convert()'],
+        answer: 0
+      }
+    ];
+
+    let current = 0;
+    const answers = new Array(quiz.length).fill(null);
+
+    const questionEl = document.getElementById('question');
+    const choicesEl = document.getElementById('choices');
+    const progressEl = document.getElementById('progress');
+    const nextBtn = document.getElementById('nextBtn');
+    const prevBtn = document.getElementById('prevBtn');
+    const resultSection = document.getElementById('result-section');
+    const resultEl = document.getElementById('result');
+    const restartBtn = document.getElementById('restartBtn');
+
+    function renderQuestion(index){
+      const item = quiz[index];
+      questionEl.textContent = item.q;
+      progressEl.textContent = `Question ${index+1} of ${quiz.length}`;
+
+      // build choices
+      choicesEl.innerHTML = '';
+      item.choices.forEach((text,i)=>{
+        const id = `choice-${i}`;
+        const div = document.createElement('div');
+        div.className = 'choice';
+
+          const label = document.createElement('label');
+          label.setAttribute('for', id);
+
+          const input = document.createElement('input');
+          input.type = 'radio';
+          input.name = 'choice';
+          input.id = id;
+          input.value = i;
+          if (answers[index] === i) input.checked = true;
+
+          // append input and text node (preserves characters like < >)
+          label.appendChild(input);
+          label.appendChild(document.createTextNode(' ' + text));
+
+          div.appendChild(label);
+          choicesEl.appendChild(div);
+      });
+
+      // set next button state based on previous answer
+      updateNextState();
+
+      // prev button visibility
+      prevBtn.style.visibility = index === 0 ? 'hidden' : 'visible';
+    }
+
+    function updateNextState(){
+      const selected = document.querySelector('input[name="choice"]:checked');
+      if(selected){
+        nextBtn.disabled = false;
+        nextBtn.classList.remove('btn-disabled');
+      } else {
+        nextBtn.disabled = true;
+        nextBtn.classList.add('btn-disabled');
+      }
+    }
+
+    // delegate change events to form
+    document.getElementById('choices-form').addEventListener('change', (e)=>{
+      if(e.target && e.target.name === 'choice'){
+        const val = parseInt(e.target.value,10);
+        answers[current] = val;
+        updateNextState();
+      }
+    });
+
+    nextBtn.addEventListener('click', (e)=>{
+      e.preventDefault();
+      // validation: ensure selection exists
+      const selected = document.querySelector('input[name="choice"]:checked');
+      if(!selected) return; // should be covered by disabled state
+
+      // move forward or finish
+      if(current < quiz.length - 1){
+        current++;
+        renderQuestion(current);
+      } else {
+        showResult();
+      }
+    });
+
+    prevBtn.addEventListener('click', (e)=>{
+      e.preventDefault();
+      if(current > 0){
+        current--;
+        renderQuestion(current);
+      }
+    });
+
+    function showResult(){
+      // calculate score
+      let score = 0;
+      quiz.forEach((item,i)=>{ if(answers[i] === item.answer) score++; });
+
+      // hide quiz and show result
+      document.getElementById('quiz-section').style.display = 'none';
+      resultSection.style.display = 'block';
+
+      const percent = Math.round((score / quiz.length) * 100);
+      resultEl.innerHTML = `
+        <div class="score">${score} / ${quiz.length}</div>
+        <p style="margin-top:8px;color:var(--muted)"><strong>Marks:</strong> ${score} / ${quiz.length} — ${percent}%</p>
+        <p style="margin-top:4px;color:var(--muted)">You answered <strong>${score}</strong> questions correctly.</p>
+      `;
+
+      // optionally show correct answers
+      const details = document.createElement('div');
+      details.style.marginTop = '12px';
+      details.style.textAlign = 'left';
+      details.innerHTML = '<strong>Answers:</strong>';
+      const list = document.createElement('ol');
+      quiz.forEach((item,i)=>{
+        const li = document.createElement('li');
+        const user = answers[i] === null ? 'No answer' : item.choices[answers[i]];
+        const correct = item.choices[item.answer];
+        li.innerHTML = `<div style="margin:6px 0"><strong>Q${i+1}:</strong> ${item.q}<br><em style=\"color:var(--muted)\">Your answer: ${user} — Correct: ${correct}</em></div>`;
+        list.appendChild(li);
+      });
+      details.appendChild(list);
+      resultEl.appendChild(details);
+    }
+
+    restartBtn.addEventListener('click', ()=>{
+      // reset
+      current = 0;
+      answers.fill(null);
+      document.getElementById('quiz-section').style.display = 'block';
+      resultSection.style.display = 'none';
+      renderQuestion(current);
+    });
+
+    // initial render
+    renderQuestion(current);
+  </script>
+</body>
+</html>
